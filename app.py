@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------
-# DARK THEME STYLING - PROJECT44 INSPIRED FEEL
+# STYLING
 # ---------------------------------------------------
 st.markdown("""
 <style>
@@ -31,20 +31,33 @@ st.markdown("""
     }
 
     .block-container {
-        padding-top: 1.2rem;
+        padding-top: 1.1rem;
         padding-bottom: 1.5rem;
     }
 
     h1, h2, h3, h4 {
         color: #f4f8ff !important;
-        letter-spacing: 0.2px;
     }
 
-    .subtle {
+    .hero {
+        background: linear-gradient(135deg, rgba(15,30,49,0.95), rgba(8,17,31,0.95));
+        border: 1px solid rgba(103,232,249,0.15);
+        border-radius: 20px;
+        padding: 20px 22px;
+        margin-bottom: 16px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.20);
+    }
+
+    .hero-title {
+        font-size: 2rem;
+        font-weight: 800;
+        color: #f4f8ff;
+        margin-bottom: 6px;
+    }
+
+    .hero-sub {
         color: #8ea3bd;
-        font-size: 0.95rem;
-        margin-top: -8px;
-        margin-bottom: 12px;
+        font-size: 1rem;
     }
 
     .metric-card {
@@ -132,44 +145,45 @@ st.markdown("""
         border: 1px solid rgba(239,68,68,0.30);
     }
 
-    .table-title {
-        font-size: 1.0rem;
-        font-weight: 700;
-        color: #f4f8ff;
-        margin-bottom: 6px;
+    .alert-banner {
+        background: linear-gradient(90deg, rgba(127,29,29,0.92), rgba(146,64,14,0.92));
+        border: 1px solid rgba(248,113,113,0.35);
+        color: #fff7ed;
+        border-radius: 16px;
+        padding: 14px 18px;
+        margin-bottom: 14px;
+        font-weight: 600;
     }
 
-    div[data-testid="stDataFrame"] {
+    .good-banner {
+        background: linear-gradient(90deg, rgba(6,78,59,0.95), rgba(8,47,73,0.95));
+        border: 1px solid rgba(45,212,191,0.28);
+        color: #ecfeff;
+        border-radius: 16px;
+        padding: 14px 18px;
+        margin-bottom: 14px;
+        font-weight: 600;
+    }
+
+    .decision-box {
+        background: rgba(9, 20, 35, 0.95);
+        border-left: 4px solid #67e8f9;
         border-radius: 14px;
-        overflow: hidden;
-        border: 1px solid rgba(255,255,255,0.08);
-    }
-
-    .hero {
-        background: linear-gradient(135deg, rgba(15,30,49,0.95), rgba(8,17,31,0.95));
-        border: 1px solid rgba(103,232,249,0.15);
-        border-radius: 20px;
-        padding: 20px 22px;
-        margin-bottom: 16px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.20);
-    }
-
-    .hero-title {
-        font-size: 2rem;
-        font-weight: 800;
-        color: #f4f8ff;
-        margin-bottom: 6px;
-    }
-
-    .hero-sub {
-        color: #8ea3bd;
-        font-size: 1rem;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+        color: #d9e7f7;
     }
 
     .mini-label {
         color: #8ea3bd;
         font-size: 0.82rem;
         margin-bottom: 4px;
+    }
+
+    div[data-testid="stDataFrame"] {
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.08);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -212,12 +226,18 @@ yards = ["North DC", "West Hub", "South FC", "East Crossdock"]
 # ---------------------------------------------------
 st.sidebar.markdown("## Scenario Controls")
 seed = st.sidebar.number_input("Random Seed", min_value=1, max_value=999, value=44)
-num_shipments = st.sidebar.slider("Number of Shipments", 6, 50, 22)
+num_shipments = st.sidebar.slider("Number of Shipments", 6, 60, 24)
 demand_shock_percent = st.sidebar.slider("Demand Shock %", 0, 100, 10)
 avg_delay_shock_hours = st.sidebar.slider("Extra Delay Shock (hrs)", 0, 10, 1)
 dock_capacity_reduction = st.sidebar.slider("Dock Capacity Reduction", 0, 3, 0)
 detention_cost_per_hour = st.sidebar.number_input("Detention Cost / Hour (INR)", min_value=100, value=1200, step=100)
 otif_tolerance_hours = st.sidebar.slider("OTIF Tolerance (hrs)", 0, 5, 1)
+
+# Business levers
+st.sidebar.markdown("## Value Levers")
+expedite_cost_per_high_risk = st.sidebar.number_input("Expedite Cost / High-Risk Load (INR)", min_value=100, value=4000, step=500)
+recovery_rate_high_risk = st.sidebar.slider("High-Risk Recovery % if Action Taken", 0, 100, 35)
+yard_capacity_improvement_pct = st.sidebar.slider("Capacity Improvement % from Added Docks", 0, 50, 15)
 
 random.seed(seed)
 np.random.seed(seed)
@@ -272,7 +292,6 @@ def detention_hours(waiting, capacity):
 
 def generate_data():
     rows = []
-
     for i in range(num_shipments):
         origin, destination = random.choice(lanes)
         carrier = random.choice(carriers)
@@ -282,14 +301,14 @@ def generate_data():
         planned_eta = random.randint(10, 36)
         base_delay = random.choice([0, 1, 2, 3, 5, 8, 10])
         delay = base_delay + avg_delay_shock_hours
-        actual_eta = planned_eta + delay
+        predicted_eta = planned_eta + delay
 
         dock_capacity = max(1, random.randint(3, 8) - dock_capacity_reduction)
         trucks_waiting = random.randint(2, 14)
         trucks_waiting = int(round(trucks_waiting * (1 + demand_shock_percent / 100)))
 
         assigned_dock = random.randint(1, 4)
-        value_of_load = random.randint(80000, 400000)
+        load_value = random.randint(80000, 400000)
 
         rows.append({
             "Shipment ID": f"SHP-{100+i}",
@@ -299,12 +318,12 @@ def generate_data():
             "Mode": mode,
             "Yard": yard,
             "Planned ETA (hrs)": planned_eta,
-            "Predicted ETA (hrs)": actual_eta,
+            "Predicted ETA (hrs)": predicted_eta,
             "Delay (hrs)": delay,
             "Dock Capacity": dock_capacity,
             "Trucks Waiting": trucks_waiting,
             "Assigned Dock": f"Dock-{assigned_dock}",
-            "Load Value (INR)": value_of_load
+            "Load Value (INR)": load_value
         })
 
     df = pd.DataFrame(rows)
@@ -336,6 +355,20 @@ def generate_data():
 df = generate_data()
 
 # ---------------------------------------------------
+# VALUE SIMULATION
+# ---------------------------------------------------
+high_risk_count = int((df["Risk"] == "High").sum())
+severe_yard_count = int((df["Yard Status"] == "Severely Congested").sum())
+total_detention_cost = float(df["Detention Cost (INR)"].sum())
+total_service_risk_cost = float(df["Service Risk Cost (INR)"].sum())
+total_risk_cost = float(df["Total Risk Cost (INR)"].sum())
+
+recoverable_service_risk = total_service_risk_cost * (recovery_rate_high_risk / 100)
+yard_savings = total_detention_cost * (yard_capacity_improvement_pct / 100)
+expedite_cost = high_risk_count * expedite_cost_per_high_risk
+net_benefit = recoverable_service_risk + yard_savings - expedite_cost
+
+# ---------------------------------------------------
 # HELPERS
 # ---------------------------------------------------
 def chip_html(text, kind):
@@ -362,10 +395,32 @@ st.markdown("""
 <div class="hero">
     <div class="hero-title">Logistics Control Tower</div>
     <div class="hero-sub">
-        Real-time shipment visibility, exception prioritization, yard pressure monitoring, and dock reassignment simulation.
+        Executive visibility for shipment risk, yard congestion, dock reassignment, and simulated business impact.
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ---------------------------------------------------
+# EXECUTIVE BANNER
+# ---------------------------------------------------
+if high_risk_count > 0 or severe_yard_count > 0:
+    st.markdown(
+        f"""
+        <div class="alert-banner">
+            ⚠️ Immediate attention required: <b>{high_risk_count}</b> high-risk shipments and <b>{severe_yard_count}</b> severely congested yards are threatening service and cost performance.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+else:
+    st.markdown(
+        """
+        <div class="good-banner">
+            ✅ Network stable: no major risk clusters detected across shipments and yard operations.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 # ---------------------------------------------------
 # KPI CARDS
@@ -373,9 +428,6 @@ st.markdown("""
 total_shipments = len(df)
 avg_delay = round(df["Delay (hrs)"].mean(), 2)
 otif_pct = round((df["OTIF"].eq("Yes").mean()) * 100, 2)
-high_risk_count = int((df["Risk"] == "High").sum())
-severe_yard_count = int((df["Yard Status"] == "Severely Congested").sum())
-total_risk_cost = round(df["Total Risk Cost (INR)"].sum(), 2)
 
 c1, c2, c3, c4, c5, c6 = st.columns(6)
 
@@ -393,7 +445,7 @@ with c2:
     <div class="metric-card">
         <div class="metric-label">Avg Delay</div>
         <div class="metric-value">{avg_delay}h</div>
-        <div class="metric-delta">Predicted network drift</div>
+        <div class="metric-delta">Predicted drift</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -436,6 +488,48 @@ with c6:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------
+# DECISION RECOMMENDATIONS
+# ---------------------------------------------------
+rec1, rec2 = st.columns(2)
+
+with rec1:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown("### Recommended Actions")
+    recommendations = []
+
+    if high_risk_count > 0:
+        recommendations.append(f"Expedite {high_risk_count} high-risk loads to recover threatened service.")
+    if severe_yard_count > 0:
+        recommendations.append(f"Open backup capacity at {severe_yard_count} stressed yards to reduce queue pressure.")
+    if (df["Assigned Dock"] != df["Recommended Dock"]).sum() > 0:
+        recommendations.append("Reassign docks for disrupted shipments to smooth inbound flow.")
+    if avg_delay > 4:
+        recommendations.append("Investigate lane-level delay drivers and carrier reliability gaps.")
+
+    if not recommendations:
+        recommendations = ["No urgent actions recommended. Maintain network monitoring cadence."]
+
+    for r in recommendations:
+        st.markdown(f'<div class="decision-box">• {r}</div>', unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with rec2:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.markdown("### Simulated Business Impact")
+    st.markdown(f'<div class="decision-box">Recoverable service-risk value: ₹{recoverable_service_risk:,.0f}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="decision-box">Potential detention savings from added capacity: ₹{yard_savings:,.0f}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="decision-box">Estimated expedite spend: ₹{expedite_cost:,.0f}</div>', unsafe_allow_html=True)
+
+    banner_class = "good-banner" if net_benefit >= 0 else "alert-banner"
+    msg = "Projected net benefit" if net_benefit >= 0 else "Projected net impact"
+    st.markdown(
+        f'<div class="{banner_class}" style="margin-top:12px;">{msg}: <b>₹{net_benefit:,.0f}</b></div>',
+        unsafe_allow_html=True
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ---------------------------------------------------
 # FILTERS
 # ---------------------------------------------------
 st.markdown('<div class="panel">', unsafe_allow_html=True)
@@ -443,29 +537,10 @@ st.markdown("### Network Filters")
 
 f1, f2, f3, f4 = st.columns(4)
 
-selected_carrier = f1.multiselect(
-    "Carrier",
-    options=sorted(df["Carrier"].unique()),
-    default=sorted(df["Carrier"].unique())
-)
-
-selected_risk = f2.multiselect(
-    "Risk",
-    options=["Low", "Medium", "High"],
-    default=["Low", "Medium", "High"]
-)
-
-selected_yard = f3.multiselect(
-    "Yard",
-    options=sorted(df["Yard"].unique()),
-    default=sorted(df["Yard"].unique())
-)
-
-selected_mode = f4.multiselect(
-    "Mode",
-    options=sorted(df["Mode"].unique()),
-    default=sorted(df["Mode"].unique())
-)
+selected_carrier = f1.multiselect("Carrier", options=sorted(df["Carrier"].unique()), default=sorted(df["Carrier"].unique()))
+selected_risk = f2.multiselect("Risk", options=["Low", "Medium", "High"], default=["Low", "Medium", "High"])
+selected_yard = f3.multiselect("Yard", options=sorted(df["Yard"].unique()), default=sorted(df["Yard"].unique()))
+selected_mode = f4.multiselect("Mode", options=sorted(df["Mode"].unique()), default=sorted(df["Mode"].unique()))
 
 filtered_df = df[
     df["Carrier"].isin(selected_carrier) &
@@ -480,19 +555,19 @@ st.markdown("</div>", unsafe_allow_html=True)
 # TABS
 # ---------------------------------------------------
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Visibility Board",
-    "Exceptions",
-    "Analytics",
-    "Shipment Drill-Down",
+    "Operations Console",
+    "Exception Manager",
+    "Performance Insights",
+    "Shipment Intelligence",
     "Network Map"
 ])
 
 # ---------------------------------------------------
-# TAB 1 - VISIBILITY
+# TAB 1
 # ---------------------------------------------------
 with tab1:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown("### Shipment Visibility Board")
+    st.markdown("### Operations Console")
 
     display_df = filtered_df[[
         "Shipment ID", "Origin", "Destination", "Carrier", "Mode", "Yard",
@@ -504,11 +579,11 @@ with tab1:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------
-# TAB 2 - EXCEPTIONS
+# TAB 2
 # ---------------------------------------------------
 with tab2:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown("### Exception Management Console")
+    st.markdown("### Exception Manager")
 
     exceptions = filtered_df[
         (filtered_df["Risk"] == "High") |
@@ -528,7 +603,7 @@ with tab2:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------
-# TAB 3 - ANALYTICS
+# TAB 3
 # ---------------------------------------------------
 with tab3:
     a1, a2 = st.columns(2)
@@ -586,12 +661,7 @@ with tab3:
             color_discrete_map={"Low": "#22c55e", "Medium": "#f59e0b", "High": "#ef4444"},
             template="plotly_dark"
         )
-        fig_risk.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=10, r=10, t=10, b=10),
-            height=320
-        )
+        fig_risk.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=10, r=10, t=10, b=10), height=320)
         st.plotly_chart(fig_risk, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -600,27 +670,17 @@ with tab3:
         st.markdown("### Yard Congestion")
         yard_chart = filtered_df.groupby("Yard", as_index=False)["Trucks Waiting"].mean()
 
-        fig_yard = px.bar(
-            yard_chart,
-            x="Yard",
-            y="Trucks Waiting",
-            template="plotly_dark"
-        )
-        fig_yard.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=10, r=10, t=10, b=10),
-            height=320
-        )
+        fig_yard = px.bar(yard_chart, x="Yard", y="Trucks Waiting", template="plotly_dark")
+        fig_yard.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=10, r=10, t=10, b=10), height=320)
         st.plotly_chart(fig_yard, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------
-# TAB 4 - DRILL DOWN
+# TAB 4
 # ---------------------------------------------------
 with tab4:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    st.markdown("### Shipment Drill-Down")
+    st.markdown("### Shipment Intelligence")
 
     shipment_list = filtered_df["Shipment ID"].tolist()
     if shipment_list:
@@ -652,26 +712,15 @@ with tab4:
         ])
 
         st.markdown("#### Milestone Timeline")
-        fig_timeline = px.line(
-            milestone_df,
-            x="Milestone",
-            y="Hour",
-            markers=True,
-            template="plotly_dark"
-        )
-        fig_timeline.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=10, r=10, t=10, b=10),
-            height=340
-        )
+        fig_timeline = px.line(milestone_df, x="Milestone", y="Hour", markers=True, template="plotly_dark")
+        fig_timeline.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=10, r=10, t=10, b=10), height=340)
         st.plotly_chart(fig_timeline, use_container_width=True)
     else:
         st.info("No shipments available for selected filters.")
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------
-# TAB 5 - MAP
+# TAB 5
 # ---------------------------------------------------
 with tab5:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
@@ -737,19 +786,14 @@ with tab5:
 # ---------------------------------------------------
 # FOOTER
 # ---------------------------------------------------
-st.markdown("""
+st.markdown(f"""
 <div class="panel">
     <div class="mini-label">Scenario Inputs</div>
     <div style="color:#c8d6e5; font-size:0.95rem;">
-        Demand Shock: <b>{}%</b> &nbsp;&nbsp;|&nbsp;&nbsp;
-        Delay Shock: <b>{} hrs</b> &nbsp;&nbsp;|&nbsp;&nbsp;
-        Dock Capacity Reduction: <b>{}</b> &nbsp;&nbsp;|&nbsp;&nbsp;
-        Detention Cost: <b>₹{:,.0f}/hr</b>
+        Demand Shock: <b>{demand_shock_percent}%</b> &nbsp;&nbsp;|&nbsp;&nbsp;
+        Delay Shock: <b>{avg_delay_shock_hours} hrs</b> &nbsp;&nbsp;|&nbsp;&nbsp;
+        Dock Capacity Reduction: <b>{dock_capacity_reduction}</b> &nbsp;&nbsp;|&nbsp;&nbsp;
+        Detention Cost: <b>₹{detention_cost_per_hour:,.0f}/hr</b>
     </div>
 </div>
-""".format(
-    demand_shock_percent,
-    avg_delay_shock_hours,
-    dock_capacity_reduction,
-    detention_cost_per_hour
-), unsafe_allow_html=True)
+""", unsafe_allow_html=True)
