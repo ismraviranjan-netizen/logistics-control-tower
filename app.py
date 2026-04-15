@@ -3,10 +3,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from math import ceil
 
-st.set_page_config(page_title="Logistics Control Tower V3", layout="wide")
+st.set_page_config(page_title="Mini Transport Management System", layout="wide")
 
-st.title("Logistics Control Tower V3")
-st.caption("Multi-plant allocation, split transport planning, ETA risk, aging risk, exception scoring, and recommendation engine.")
+st.title("🚚 Mini Transport Management System")
+st.caption("Plan dispatch, assign transporters, track delivery readiness, and monitor transport risk in one place.")
 
 REGIONS = ["North", "South", "West", "East"]
 PRIORITIES = ["High", "Medium", "Low"]
@@ -90,6 +90,28 @@ def alert_color(score):
     elif score >= 40:
         return "🟠 Amber"
     return "🟢 Green"
+
+
+def derive_dispatch_status(allocated_qty, forecast_qty, utilization_pct):
+    if forecast_qty <= 0:
+        return "Invalid Order"
+    if allocated_qty <= 0:
+        return "Not Planned"
+    if allocated_qty < forecast_qty:
+        return "Partially Planned"
+    if utilization_pct < 70:
+        return "Planned (Low Utilization)"
+    return "Planned"
+
+
+def derive_delivery_status(unfulfilled_qty, avg_eta):
+    if unfulfilled_qty > 0:
+        return "At Risk"
+    if avg_eta >= 4:
+        return "Delayed"
+    if avg_eta >= 3:
+        return "Watch"
+    return "On Track"
 
 
 # =========================================================
@@ -356,7 +378,12 @@ def run_control_tower_v3(retailers_df, plants_df, transporters_df, route_cost_df
             transport_status=transport_status
         )
 
+        dispatch_status = derive_dispatch_status(allocated_qty, forecast_qty, utilization_pct)
+        delivery_status = derive_delivery_status(unfulfilled_qty, avg_eta)
+        load_id = f"TMS-{retailer[:3].upper()}-{region[:2].upper()}-{po_qty}"
+
         results.append({
+            "Load ID": load_id,
             "Retailer": retailer,
             "Region": region,
             "Priority": priority,
@@ -373,6 +400,8 @@ def run_control_tower_v3(retailers_df, plants_df, transporters_df, route_cost_df
             "Service Level %": service_level,
             "Risk Score": risk_score,
             "Alert": alert_color(risk_score),
+            "Dispatch Status": dispatch_status,
+            "Delivery Status": delivery_status,
             "Recommendations": recommendations,
             "Allocation Detail": allocation_rows,
             "Transport Plan": transport_plan
@@ -475,7 +504,7 @@ with tab4:
         use_container_width=True
     )
 
-run_button = st.button("Run Control Tower V3")
+run_button = st.button("Run TMS Planning")
 
 
 # =========================================================
@@ -490,7 +519,7 @@ if run_button:
         market_intelligence=market_intelligence
     )
 
-    st.subheader("Executive KPI Dashboard")
+    st.subheader("TMS KPI Dashboard")
 
     total_po = int(results_df["PO Qty"].sum()) if not results_df.empty else 0
     total_forecast = int(results_df["Forecast Qty"].sum()) if not results_df.empty else 0
@@ -513,14 +542,14 @@ if run_button:
     c7.metric("Avg Utilization %", avg_util)
     c8.metric("Avg Risk Score", avg_risk)
 
-    st.subheader("Control Tower Decision Table")
+    st.subheader("Transport Decision Table")
     st.dataframe(
         results_df[[
-            "Retailer", "Region", "Priority", "PO Qty", "Forecast Qty",
+            "Load ID", "Retailer", "Region", "Priority", "PO Qty", "Forecast Qty",
             "Allocated Qty", "Unfulfilled Qty", "Warehouse Block Qty",
             "Transport Cost", "Truck Utilization %", "Avg ETA Days",
             "Avg Inventory Age", "Service Level %", "Risk Score",
-            "Alert", "Recommendations"
+            "Alert", "Dispatch Status", "Delivery Status", "Recommendations"
         ]],
         use_container_width=True
     )
@@ -539,7 +568,7 @@ if run_button:
             exception_df[[
                 "Retailer", "Region", "Priority", "Unfulfilled Qty",
                 "Warehouse Block Qty", "Avg ETA Days", "Transport Cost",
-                "Truck Utilization %", "Risk Score", "Alert"
+                "Truck Utilization %", "Risk Score", "Alert", "Delivery Status"
             ]],
             use_container_width=True
         )
@@ -571,6 +600,7 @@ if run_button:
 
     for _, row in results_df.iterrows():
         with st.expander(f"{row['Retailer']} | {row['Region']} | {row['Alert']}"):
+            st.write(f"**Load ID:** {row['Load ID']}  |  **Dispatch:** {row['Dispatch Status']}  |  **Delivery:** {row['Delivery Status']}")
             st.write("**Allocation Detail**")
             if row["Allocation Detail"]:
                 st.dataframe(pd.DataFrame(row["Allocation Detail"]), use_container_width=True)
@@ -590,9 +620,9 @@ if run_button:
     st.download_button(
         "Download V3 Results CSV",
         data=csv,
-        file_name="logistics_control_tower_v3_results.csv",
+        file_name="mini_tms_results.csv",
         mime="text/csv"
     )
 
 else:
-    st.info("Set your scenario and click 'Run Control Tower V3'.")
+    st.info("Set your scenario and click 'Run TMS Planning'.")
